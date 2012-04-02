@@ -1,0 +1,12 @@
+{
+    "name": "SyncRun",
+    "description": "A simple tool for you to run async in a queue",
+    "version": "1.0.0",
+    "author": "Neekey <ni184775761@gmail.com>",
+    "keywords": [ "SyncRun" ],
+    "main": "SyncRun.js",
+    "repository": {
+        "type": "git",
+        "url": "git@github.com:neekey/syncrun.git"
+    }
+}

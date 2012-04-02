@@ -41,6 +41,11 @@ syncRun是一个简单的小工具。它通过对异步方法进行简单的封�
 	
 ##使用
 
+###安装
+ `npm install SyncRun`
+
+###步骤
+
 * 创建一个队列：`var SyncRun = require( 'syncRun' ).newQueue();`
 * 创建用于该队列中的方法：`SyncRun（fn）` 其中`fn`为需要封装的方法，SyncRun将返回一个封装好的函数对象
 * 按照**同步**执行的思路，以此调用这些方法。
