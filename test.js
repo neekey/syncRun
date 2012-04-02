@@ -1,17 +1,17 @@
 var SyncMethod = require( './index').SyncMethod;
 
-var sleep = SyncMethod( function ( s, fn ){
+var sleep = SyncMethod( 'sleep', function ( s, fn ){
 
     setTimeout( fn, s );
 });
 
-var sleep2 = SyncMethod( function ( s, fn ){
+var sleep2 = SyncMethod( 'sleep2', function ( s, fn ){
 
     setTimeout( fn, s );
 });
 
 
-var sleep3 = SyncMethod( function ( next ){
+var sleep3 = SyncMethod( 'sleep3', function ( next ){
 
     sleep( 2000, function (){
 
@@ -19,7 +19,7 @@ var sleep3 = SyncMethod( function ( next ){
     });
 });
 
-var sleep4 = SyncMethod( function ( next ){
+var sleep4 = SyncMethod( 'sleep4', function ( next ){
 
     sleep( 2000, function (){
 
@@ -39,7 +39,7 @@ var sleep4 = SyncMethod( function ( next ){
     });
 });
 
-var sleep5 = SyncMethod( function ( next ){
+var sleep5 = SyncMethod( 'sleep5', function ( next ){
 
     sleep( 2000, function (){
 

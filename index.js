@@ -25,13 +25,18 @@ var Extend = function (s, t) {
 var EventEmitter = require('events').EventEmitter;
 var Util = require('util');
 
-var QueueItemMethod = function (method) {
+var QueueItemMethod = function ( methodName, method) {
 
+    if( typeof methodName === 'function' ){
+
+        method = methodName;
+        methodName = '';
+    }
     return (function (method) {
 
         return function () {
 
-            var newQueueItem = new QueueItem(method, this, arguments);
+            var newQueueItem = new QueueItem( methodName, method, this, arguments);
             var currentQueueItem = QueueRoot.currentQueueItem;
 
             currentQueueItem.addChild(newQueueItem);
@@ -41,7 +46,7 @@ var QueueItemMethod = function (method) {
 
 };
 
-var QueueItem = function (method, scope, args, ifRoot) {
+var QueueItem = function ( methodName, method, scope, args, ifRoot) {
 
     EventEmitter.call(this);
     if (ifRoot) {
@@ -53,7 +58,7 @@ var QueueItem = function (method, scope, args, ifRoot) {
     }
     this.children = [];
     this.isChildRunning = false;
-//    this.methodName = methodName;
+    this.methodName = methodName;
     this.method = method;
     this.arguments = [];
     this.scope = scope;
@@ -116,6 +121,8 @@ var QueueItem = function (method, scope, args, ifRoot) {
         })();
 
         this.arguments.push(proxyCallback);
+
+        this.callback = proxyCallback;
     }
 
     if (ifRoot) {
@@ -251,6 +258,8 @@ Extend(QueueItem.prototype, {
 
         // 决定addTime
         item.addTime = this.selfStat;
+
+        console.log( this.methodName, ' add child ', item.methodName );
 
 //        item.rootItem = this.rootItem;
 //        item.dependItem = this.children[ this.children.length - 1 ] || this.dependItem;
