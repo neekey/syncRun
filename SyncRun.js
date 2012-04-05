@@ -37,6 +37,8 @@ var newQueue = function (){
 
     return (function( root ){
 
+        // 返回用于构造该队列中的同步方法的方法...
+        // 该方法将返回封装后的方法
         return function ( methodName, method ) {
 
             if( typeof methodName === 'function' ){
@@ -52,6 +54,9 @@ var newQueue = function (){
                     var currentQueueItem = root.currentQueueItem;
 
                     currentQueueItem.addChild(newQueueItem);
+
+                    // 提供链式调用的可能
+                    return this;
                 };
 
             })( method );
