@@ -5,6 +5,27 @@
  */
 
 //todo 关于同步方法还需要再思考
+/* todo 需要一个方法在不同的异步方法之间传递变量,比如
+
+    getA = SyncRun(function ( next ){
+
+        setTimeout(function (){
+            SyncRun.save({ a: 'neekey' });
+            next();
+        }, 5000 );
+    });
+
+    getA();
+
+    a = SyncRun.get( 'a', function ( a ){
+
+        console.log( 'a is', a );  // neekey
+    });
+
+    console.log( a ); // undefined
+
+ */
+// todo 队列的退出 或者暂停 或者继续
 
 /**
  *简单的对象扩展方法
