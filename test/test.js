@@ -1,7 +1,7 @@
 // 队列1
-var SyncMethod = require( './SyncRun').newQueue();
+var SyncMethod = require( '../SyncRun').newQueue();
 // 队列2
-var SyncMethod2 = require( './SyncRun').newQueue();
+var SyncMethod2 = require( '../SyncRun').newQueue();
 
 // 这是一个同步方法，需要在定义的时候执行next，但是在调用的时候不必制定next
 var syncTest = SyncMethod( function ( next ){

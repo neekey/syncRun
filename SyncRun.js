@@ -25,7 +25,7 @@
     console.log( a ); // undefined
 
  */
-// todo 队列的退出 或者暂停 或者继续
+// todo 队列的清空 或者暂停 或者继续
 
 /**
  *简单的对象扩展方法
@@ -56,7 +56,7 @@ var newQueue = function (){
     var QueueRoot = new QueueItem('root', function () {
     }, {}, [], true);
 
-    return (function( root ){
+    var newSyncMethod = (function( root ){
 
         // 返回用于构造该队列中的同步方法的方法...
         // 该方法将返回封装后的方法
@@ -84,6 +84,26 @@ var newQueue = function (){
 
         };
     })( QueueRoot );
+
+    newSyncMethod.root = QueueRoot;
+
+    newSyncMethod.clear = function (){
+
+        this.root.clear();
+    };
+
+    // 将pause 的延时settimeout放在done中发出
+    newSyncMethod.pause = function ( dur ){
+
+        this.root.pause( dur );
+    };
+
+    newSyncMethod.run = function (){
+
+        this.root.goon();
+    };
+
+    return newSyncMethod;
 };
 
 /**
@@ -106,6 +126,8 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
         this.root = this;
         this.currentQueueItem = this;
         this.runningItemCount = 0;
+        this.ifPause = false;
+        this.pauseItem = null;
     }
 
     // 所有子节点
@@ -187,6 +209,11 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
         // 当一个节点被添加
         self.on('add', function (item) {
 
+            if( self.ifPause ){
+
+                return;
+            }
+
 //            console.log('add');
             var child;
 
@@ -240,6 +267,14 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
 //            console.log('done');
 
             if (item.isDone) {
+
+                // 若队列被pause
+                if( self.ifPause ){
+
+                    self.pauseItem = item;
+                    return;
+                }
+
                 self.runningItemCount--;
                 item.parent.isChildRunning = false;
             }
@@ -294,6 +329,29 @@ Extend(QueueItem.prototype, {
         this.selfStat = 'done';
 
         this.fire('runFinished', self);
+    },
+
+    goon: function (){
+
+        this.root.ifPause = false;
+        this.pauseItem.fire( 'done', this.pauseItem );
+    },
+
+    pause: function ( dur ){
+
+        this.root.ifPause = true;
+        var self = this;
+
+        dur = parseInt( dur );
+
+        if( !isNaN( dur ) && dur > 0 ){
+
+            setTimeout( function (){
+
+                self.goon();
+
+            }, dur );
+        }
     },
 
     // 获取以当前节点为根节点，下一个需要执行的child节点
