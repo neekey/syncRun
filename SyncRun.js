@@ -60,24 +60,32 @@ var newQueue = function (){
 
         // 返回用于构造该队列中的同步方法的方法...
         // 该方法将返回封装后的方法
-        return function ( methodName, method ) {
+        return function ( methodName, method, scope ) {
 
             if( typeof methodName === 'function' ){
 
+                var temp = method;
                 method = methodName;
                 methodName = '';
+                scope = method;
             }
+
+            methodName = typeof methodName === 'string' ? methodName : '';
+            method = typeof method === 'function' ? method : function(){};
+
             return (function (method) {
 
                 return function () {
 
-                    var newQueueItem = new QueueItem( methodName, method, this, arguments);
+                    scope = scope || this;
+
+                    var newQueueItem = new QueueItem( methodName, method, scope, arguments);
                     var currentQueueItem = root.currentQueueItem;
 
                     currentQueueItem.addChild(newQueueItem);
 
                     // 提供链式调用的可能
-                    return this;
+                    return scope;
                 };
 
             })( method );
@@ -135,7 +143,9 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
 
     // 直接视最后一个参数为异步回调（如果最后一个参数是函数的话，如果不是则构造一个）
     // 对函数调用时的参数重新进行组装, 添加回调
-    for (var i = 0; currentArg = args[i]; i++) {
+    for (var i = 0; i < args.length; i++) {
+
+        currentArg = args[ i ];
 
         // 若最后一个参数为function，则被当做回调函数
         if (typeof currentArg == "function" && i == (args.length - 1)) {
