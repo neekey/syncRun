@@ -102,18 +102,23 @@ var newQueue = function (){
 
     newSyncMethod.clear = function (){
 
-        this.root.clear();
+        QueueRoot.clear();
     };
 
     // 将pause 的延时settimeout放在done中发出
     newSyncMethod.pause = function ( dur ){
 
-        this.root.pause( dur );
+        QueueRoot.pause( dur );
     };
 
     newSyncMethod.run = function (){
 
-        this.root.goon();
+        QueueRoot.goon();
+    };
+
+    newSyncMethod.reset = function(){
+        QueueRoot.clear();
+        QueueRoot.goon();
     };
 
     newSyncMethod.get = function( key ){
@@ -389,7 +394,16 @@ Extend(QueueItem.prototype, {
      * This method should not effect the method (include itself) that is already running.
      */
     clear: function(){
+        this.children.forEach(function( child ){
+            child.clear();
+        });
         this.children = [];
+
+        if( this.root === this ){
+            this.currentQueueItem = this.root;
+            this.runningItemCount = 0;
+            this.pausedItem = null;
+        }
     },
 
     // 获取以当前节点为根节点，下一个需要执行的child节点
