@@ -25,7 +25,7 @@
     console.log( a ); // undefined
 
  */
-// todo 队列的退出 或者暂停 或者继续
+// todo 队列的清空 或者暂停 或者继续
 
 /**
  *简单的对象扩展方法
@@ -52,11 +52,14 @@ var Util = require('util');
  */
 var newQueue = function (){
 
-    // 新建队列根节点
+    // Create an new `root` item.
     var QueueRoot = new QueueItem('root', function () {
     }, {}, [], true);
 
-    return (function( root ){
+    // Data used internal.
+    var SyncData = {};
+
+    var newSyncMethod = (function( root ){
 
         // 返回用于构造该队列中的同步方法的方法...
         // 该方法将返回封装后的方法
@@ -81,6 +84,7 @@ var newQueue = function (){
 
                     var newQueueItem = new QueueItem( methodName, method, scope, arguments);
                     var currentQueueItem = root.currentQueueItem;
+                    newQueueItem.syncQueue = root.syncQueue;
 
                     currentQueueItem.addChild(newQueueItem);
 
@@ -92,6 +96,43 @@ var newQueue = function (){
 
         };
     })( QueueRoot );
+
+    newSyncMethod.root = QueueRoot;
+    QueueRoot.syncQueue = newSyncMethod;
+
+    newSyncMethod.clear = function (){
+
+        this.root.clear();
+    };
+
+    // 将pause 的延时settimeout放在done中发出
+    newSyncMethod.pause = function ( dur ){
+
+        this.root.pause( dur );
+    };
+
+    newSyncMethod.run = function (){
+
+        this.root.goon();
+    };
+
+    newSyncMethod.get = function( key ){
+        return SyncData[ key ];
+    };
+
+    newSyncMethod.set = function( key, value ){
+
+        if( typeof key === 'string' ){
+            SyncData[ key ] = value;
+        }
+        else if( key.constructor === Object ){
+            for( var name in key ){
+                SyncData[ name ] = key[ name ];
+            }
+        }
+    };
+
+    return newSyncMethod;
 };
 
 /**
@@ -114,6 +155,8 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
         this.root = this;
         this.currentQueueItem = this;
         this.runningItemCount = 0;
+        this.ifPause = false;
+        this.pausedItem = null;
     }
 
     // 所有子节点
@@ -148,7 +191,7 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
         currentArg = args[ i ];
 
         // 若最后一个参数为function，则被当做回调函数
-        if (typeof currentArg == "function" && i == (args.length - 1)) {
+        if (typeof currentArg == 'function' && i == (args.length - 1)) {
 
             hasCallback = true;
             self.callback = currentArg;
@@ -159,7 +202,12 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
 
                     self.callbackTime = self.selfStat;
 
+                    var bakQueue = scope._sync;
+                    scope._sync = self.syncQueue;
+
                     method.call(scope, result);
+
+                    scope._sync = bakQueue;
 
                     self.isCallbackDone = true;
                     self.done();
@@ -197,7 +245,11 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
         // 当一个节点被添加
         self.on('add', function (item) {
 
-//            console.log('add');
+            if( self.ifPause ){
+
+                return;
+            }
+
             var child;
 
             // 若当前没有节点在执行，则寻找一个节点，执行它
@@ -209,12 +261,10 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
             // 若一个节点是在父节点running的时候被add的，且该父节点没有其他子节点在巡行，则执行该子节点
             if (item.addTime === 'running' && item.parent.isChildRunning === false ) {
 
-//                console.log( 'running add' );
                 child = item;
             }
 
             if (child) {
-//                    console.log( 'next child', child.callback.toString() );
 
                 // 此处是同步的emit
                 self.emit('runBegin', child);
@@ -224,7 +274,6 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
         // 一个节点开始执行
         self.on('runBegin', function (item) {
 
-//            console.log('run begin');
             self.currentQueueItem = item;
             self.runningItemCount++;
             item.run();
@@ -247,7 +296,10 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
         // 一个节点执行完毕
         self.on('done', function (item) {
 
-//            console.log('done');
+            // 若队列被pause
+            if( self.ifPause ){
+                return;
+            }
 
             if (item.isDone) {
                 self.runningItemCount--;
@@ -262,7 +314,6 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
                 var child = self.getNextChild();
                 if (child) {
 
-//                    console.log('next child');
                     self.emit('runBegin', child);
 
                 }
@@ -306,6 +357,41 @@ Extend(QueueItem.prototype, {
         this.fire('runFinished', self);
     },
 
+    goon: function (){
+
+        this.root.ifPause = false;
+
+        if( this.pausedItem ){
+            this.pausedItem.fire( 'done', this.pausedItem );
+        }
+    },
+
+    pause: function ( dur ){
+
+        this.root.ifPause = true;
+        this.root.pausedItem = this.root.currentQueueItem;
+        var self = this;
+
+        dur = parseInt( dur );
+
+        if( !isNaN( dur ) && dur > 0 ){
+
+            setTimeout( function (){
+
+                self.goon();
+
+            }, dur );
+        }
+    },
+
+    /**
+     * Clear all its children.
+     * This method should not effect the method (include itself) that is already running.
+     */
+    clear: function(){
+        this.children = [];
+    },
+
     // 获取以当前节点为根节点，下一个需要执行的child节点
     getNextChild:function () {
 
@@ -313,8 +399,6 @@ Extend(QueueItem.prototype, {
         var child;
 
         for (var i = 0; child = this.children[ i ]; i++) {
-
-//            console.log( child.callback.toString());
 
             if (!child.isDone && child.selfStat === 'wait' ) {
                 childToRun = child;
@@ -328,7 +412,6 @@ Extend(QueueItem.prototype, {
                     break;
                 }
             }
-
         }
 
         return childToRun;
@@ -340,12 +423,9 @@ Extend(QueueItem.prototype, {
      */
     addChild:function (item) {
 
-//        console.log('add!');
         item.parent = this;
         item.root = this.root;
         item.addTime = this.selfStat;
-
-//        console.log( this.methodName, ' add child ', item.methodName );
 
         // add the new item to this childrens list
         this.children.push(item);
@@ -367,20 +447,11 @@ Extend(QueueItem.prototype, {
 
         if (this.selfStat !== 'done') {
 
-//            console.log('self not finished: ', this.methodName);
             this.isDone = false;
         }
-        else if (this.isCallbackDone === false) {
-
-            this.isDone = false;
-        }
-        else {
-
-            this.isDone = true;
-        }
+        else this.isDone = this.isCallbackDone !== false;
 
         this.fire('done', this);
-
     }
 });
 

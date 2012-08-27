@@ -1,7 +1,7 @@
 {
     "name": "SyncRun",
     "description": "A simple tool for you to run async in a queue",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "contributors": {
         "neekey": "ni184775761@gmail.com"
     },
