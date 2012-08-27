@@ -56,6 +56,9 @@ var newQueue = function (){
     var QueueRoot = new QueueItem('root', function () {
     }, {}, [], true);
 
+    // Data used internal.
+    var SyncData = {};
+
     var newSyncMethod = (function( root ){
 
         // 返回用于构造该队列中的同步方法的方法...
@@ -73,6 +76,7 @@ var newQueue = function (){
 
                     var newQueueItem = new QueueItem( methodName, method, this, arguments);
                     var currentQueueItem = root.currentQueueItem;
+                    newQueueItem.syncQueue = root.syncQueue;
 
                     currentQueueItem.addChild(newQueueItem);
 
@@ -86,6 +90,7 @@ var newQueue = function (){
     })( QueueRoot );
 
     newSyncMethod.root = QueueRoot;
+    QueueRoot.syncQueue = newSyncMethod;
 
     newSyncMethod.clear = function (){
 
@@ -101,6 +106,22 @@ var newQueue = function (){
     newSyncMethod.run = function (){
 
         this.root.goon();
+    };
+
+    newSyncMethod.get = function( key ){
+        return SyncData[ key ];
+    };
+
+    newSyncMethod.set = function( key, value ){
+
+        if( typeof key === 'string' ){
+            SyncData[ key ] = value;
+        }
+        else if( key.constructor === Object ){
+            for( var name in key ){
+                SyncData[ name ] = key[ name ];
+            }
+        }
     };
 
     return newSyncMethod;
@@ -127,7 +148,7 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
         this.currentQueueItem = this;
         this.runningItemCount = 0;
         this.ifPause = false;
-        this.pauseItem = null;
+        this.pausedItem = null;
     }
 
     // 所有子节点
@@ -171,7 +192,12 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
 
                     self.callbackTime = self.selfStat;
 
+                    var bakQueue = scope._sync;
+                    scope._sync = self.syncQueue;
+
                     method.call(scope, result);
+
+                    scope._sync = bakQueue;
 
                     self.isCallbackDone = true;
                     self.done();
@@ -260,15 +286,12 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
         // 一个节点执行完毕
         self.on('done', function (item) {
 
+            // 若队列被pause
+            if( self.ifPause ){
+                return;
+            }
+
             if (item.isDone) {
-
-                // 若队列被pause
-                if( self.ifPause ){
-
-                    self.pauseItem = item;
-                    return;
-                }
-
                 self.runningItemCount--;
                 item.parent.isChildRunning = false;
             }
@@ -327,12 +350,16 @@ Extend(QueueItem.prototype, {
     goon: function (){
 
         this.root.ifPause = false;
-        this.pauseItem.fire( 'done', this.pauseItem );
+
+        if( this.pausedItem ){
+            this.pausedItem.fire( 'done', this.pausedItem );
+        }
     },
 
     pause: function ( dur ){
 
         this.root.ifPause = true;
+        this.root.pausedItem = this.root.currentQueueItem;
         var self = this;
 
         dur = parseInt( dur );
@@ -345,6 +372,14 @@ Extend(QueueItem.prototype, {
 
             }, dur );
         }
+    },
+
+    /**
+     * Clear all its children.
+     * This method should not effect the method (include itself) that is already running.
+     */
+    clear: function(){
+        this.children = [];
     },
 
     // 获取以当前节点为根节点，下一个需要执行的child节点
