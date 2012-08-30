@@ -4,29 +4,6 @@
  * 一个简单的异步方法队列化工具。使得改造后的异步方法将顺序执行。
  */
 
-//todo 关于同步方法还需要再思考
-/* todo 需要一个方法在不同的异步方法之间传递变量,比如
-
-    getA = SyncRun(function ( next ){
-
-        setTimeout(function (){
-            SyncRun.save({ a: 'neekey' });
-            next();
-        }, 5000 );
-    });
-
-    getA();
-
-    a = SyncRun.get( 'a', function ( a ){
-
-        console.log( 'a is', a );  // neekey
-    });
-
-    console.log( a ); // undefined
-
- */
-// todo 队列的清空 或者暂停 或者继续
-
 /**
  *简单的对象扩展方法
  * @param s
@@ -70,7 +47,7 @@ var newQueue = function (){
                 var temp = method;
                 method = methodName;
                 methodName = '';
-                scope = method;
+                scope = temp;
             }
 
             methodName = typeof methodName === 'string' ? methodName : '';
@@ -80,13 +57,15 @@ var newQueue = function (){
 
                 return function () {
 
-                    scope = scope || this;
+                    scope = scope || {};
 
+                    // Use the caller.queueItem as parent, is not found, then set its parent to root.
+                    var currentCaller = arguments.callee.caller;
+                    var parentQueueItem = ( currentCaller ? currentCaller.queueItem : undefined ) || root;
                     var newQueueItem = new QueueItem( methodName, method, scope, arguments);
-                    var currentQueueItem = root.currentQueueItem;
                     newQueueItem.syncQueue = root.syncQueue;
 
-                    currentQueueItem.addChild(newQueueItem);
+                    parentQueueItem.addChild(newQueueItem);
 
                     // 提供链式调用的可能
                     return scope;
@@ -210,7 +189,16 @@ var QueueItem = function ( methodName, method, scope, args, ifRoot) {
                     var bakQueue = scope._sync;
                     scope._sync = self.syncQueue;
 
+                    // Add queueItem to method,
+                    // so that new queueItem which is created in method can use `arguments.callee.caller.queueItem` to indicated its parent.
+                    // And we backup in case of overwrite.
+                    var bakQueueItem = method.queueItem;
+                    method.queueItem = self;
+
                     method.call(scope, result);
+
+                    method.queueItem = bakQueueItem;
+
 
                     scope._sync = bakQueue;
 
@@ -356,7 +344,20 @@ Extend(QueueItem.prototype, {
         this.parent.isChildRunning = true;
 
         this.selfStat = 'running';
-        typeof this.method === 'function' && this.method.apply(this.scope, this.arguments);
+
+        if( typeof this.method === 'function' ){
+
+            // Add queueItem to method,
+            // so that new queueItem which is created in method can use `arguments.callee.caller.queueItem` to indicated its parent.
+            // And we backup in case of overwrite.
+            var bakQueueItem = this.method.queueItem;
+
+            this.method.queueItem = this;
+            this.method.apply(this.scope, this.arguments);
+
+            this.method.queueItem = bakQueueItem;
+        }
+
         this.selfStat = 'done';
 
         this.fire('runFinished', self);

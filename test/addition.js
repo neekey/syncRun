@@ -166,9 +166,9 @@ describe('Additional method for syncRun', function(){
         });
     });
 
-    describe( '#get(), #set()', function( done ){
+    describe( '#get(), #set()', function(){
         
-        it( '#set() Using string', function(){
+        it( '#set() Using string', function( done ){
 
             fn(function(){
 
@@ -183,7 +183,7 @@ describe('Additional method for syncRun', function(){
             });
         });
 
-        it( '#set() Using object', function(){
+        it( '#set() Using object', function( done ){
 
             fn(function(){
 
