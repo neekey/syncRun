@@ -1,6 +1,4 @@
-var expect = require( 'expect.js' );
-
-var SyncMethod = require( '../SyncRun').newQueue();
+var SyncMethod = SyncRun.newQueue();
 var fn = SyncMethod(function ( next ){
     setTimeout( next, 100 );
 });

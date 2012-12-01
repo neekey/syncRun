@@ -1,6 +1,4 @@
-var expect = require( 'expect.js' );
-
-var SyncMethod = require( '../SyncRun').newQueue();
+var SyncMethod = SyncRun.newQueue();
 var fn = SyncMethod(function ( dur, next ){
 
     if( typeof dur === 'function' ){
@@ -69,7 +67,6 @@ describe('Order Test', function(){
                 queue.push( 'b' );
             });
             setTimeout(function(){
-
 
                 fn(function(){
                     queue.push( 'c' );
