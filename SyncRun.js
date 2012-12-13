@@ -1,10 +1,10 @@
 /**
  * SyncRun
- * @auth Neekey<ni184775761@gmail.com>
+ * @author Neekey<ni184775761@gmail.com>
  * 一个简单的异步方法队列化工具。使得改造后的异步方法将顺序执行。
  */
 
-(function(){
+;(function(){
 
     /**
      *简单的对象扩展方法
@@ -12,11 +12,12 @@
      * @param t
      * @constructor
      */
+
     var Extend = function (s, t) {
 
         var name;
 
-        for (name in t) {
+        for ( name in t) {
 
             s[ name ] = t[ name ];
         }
@@ -35,6 +36,7 @@
      * 产生新的队列.该方法将返回一个新方法，用这个新方法构造出来的异步方法都将处于一个执行队列中
      * @return {Function} SyncMethod( [methodName], fn );
      */
+
     var newQueue = function (){
 
         // Create an new `root` item.
@@ -42,7 +44,7 @@
         }, {}, [], true);
 
         // Data used internal.
-        var SyncData = {};
+//        var SyncData = {};
 
         var newSyncMethod = (function( root ){
 
@@ -67,13 +69,18 @@
 
                         scope = scope || {};
 
-                        // Use the caller.queueItem as parent, is not found, then set its parent to root.
+                        // Use the caller.queueItem as parent, if not found, then set its parent to root.
                         var currentCaller = arguments.callee.caller;
                         var parentQueueItem = ( currentCaller ? currentCaller.queueItem : undefined ) || root;
+                        var addStat = ( currentCaller ? currentCaller.stat : undefined );
+                        // Instant an new item.
                         var newQueueItem = new QueueItem( methodName, method, scope, arguments);
+
+                        // Set syncQueue reference.
                         newQueueItem.syncQueue = root.syncQueue;
 
-                        parentQueueItem.addChild(newQueueItem);
+                        // Add this new item to its parent.
+                        parentQueueItem.addChild( newQueueItem, addStat );
 
                         // 提供链式调用的可能
                         return scope;
@@ -87,43 +94,6 @@
         newSyncMethod.root = QueueRoot;
         QueueRoot.syncQueue = newSyncMethod;
 
-        newSyncMethod.clear = function (){
-
-            QueueRoot.clear();
-        };
-
-        // 将pause 的延时settimeout放在done中发出
-        newSyncMethod.pause = function ( dur ){
-
-            QueueRoot.pause( dur );
-        };
-
-        newSyncMethod.run = function (){
-
-            QueueRoot.goon();
-        };
-
-        newSyncMethod.reset = function(){
-            QueueRoot.clear();
-            QueueRoot.goon();
-        };
-
-        newSyncMethod.get = function( key ){
-            return SyncData[ key ];
-        };
-
-        newSyncMethod.set = function( key, value ){
-
-            if( typeof key === 'string' ){
-                SyncData[ key ] = value;
-            }
-            else if( key.constructor === Object ){
-                for( var name in key ){
-                    SyncData[ name ] = key[ name ];
-                }
-            }
-        };
-
         return newSyncMethod;
     };
 
@@ -133,28 +103,18 @@
      * @param method 方法
      * @param scope 方法执行的上下文
      * @param args 方法执行时的参数 最后一个参数将被视为异步回调
-     * @param ifRoot 该节点是否作为根节点
+     * @param [ifRoot] 该节点是否作为根节点
      * @constructor
      */
+
     var QueueItem = function ( methodName, method, scope, args, ifRoot) {
 
         // 继承EventEmitter
         EE.call(this);
 
-        // 若为根节点
-        if (ifRoot) {
-
-            this.root = this;
-            this.currentQueueItem = this;
-            this.runningItemCount = 0;
-            this.ifPause = false;
-            this.pausedItem = null;
-        }
-
         // 所有子节点
         this.children = [];
-        // 是否有子节点处于运行状态
-        this.isChildRunning = false;
+        // 记录方法名称
         this.methodName = methodName;
         this.method = method;
         this.arguments = [];
@@ -162,14 +122,12 @@
         this.callback = undefined;
         // 用来标示item及其children是否都执行完毕
         this.isDone = false;
-        // 用来标示item自身的method的执行状态
-        this.selfStat = 'wait'; // wait | running | done
         // 异步回调是否已经被执行
         this.isCallbackDone = false;
-        // 回调被执行的时刻（selfState的状态）（用于同步方法的激活下一个节点操作时使用）
-        this.callbackTime = null;
-        // 当前节点被添加的时间（selfState的状态）用于判断子节点是在回调中被添加的还是父节点的方法执行中被添加的
-        this.addTime = null;
+        this.isCallbackExecuted = false;
+        // 方法是否已经被执行完毕
+        this.isMethodDone = false;
+        this.isMethodExecuted = false;
 
         var self = this;
         var hasCallback = false;
@@ -190,10 +148,16 @@
 
                 // 对回调函数进行封装
                 proxyCallback = (function (method) {
+
+                    /**
+                     * QueueItem的回调实际执行方法
+                     * @event QueueItem#callbackDone
+                     */
+
                     return function (result) {
 
-                        self.callbackTime = self.selfStat;
-
+                        // 记录当前children数量，用于检测在回调的执行中是否有新的child增加
+                        var curChildrenLen = self.children.length;
                         var bakQueue = scope._sync;
                         scope._sync = self.syncQueue;
 
@@ -201,17 +165,25 @@
                         // so that new queueItem which is created in method can use `arguments.callee.caller.queueItem` to indicated its parent.
                         // And we backup in case of overwrite.
                         var bakQueueItem = method.queueItem;
+                        var bakMethodStat = method.stat;
                         method.queueItem = self;
+                        method.stat = 'callback';
 
+                        // 执行回调
                         method.call(scope, result);
 
                         method.queueItem = bakQueueItem;
-
+                        method.stat = bakMethodStat;
 
                         scope._sync = bakQueue;
 
-                        self.isCallbackDone = true;
-                        self.done();
+                        self.fire( 'callbackExecuted' );
+
+                        // 若在回调执行后，没有新的child增加，则说明该回调的过程结束
+                        if( self.children.length == curChildrenLen ){
+                            self.isCallbackDone = true;
+                            self.fire( 'callbackDone' );
+                        }
                     };
                 })(currentArg);
 
@@ -226,12 +198,10 @@
         if (!hasCallback) {
 
             proxyCallback = (function () {
-                return function (result) {
-
-                    self.callbackTime = self.selfStat;
+                return function () {
                     self.isCallbackDone = true;
-
-                    self.done();
+                    self.fire( 'callbackExecuted' );
+                    self.fire( 'callbackDone' );
                 };
             })();
 
@@ -240,104 +210,77 @@
             self.callback = proxyCallback;
         }
 
-        // 若为根节点，还需要做一些绑定
-        if (ifRoot) {
-
-            // 当一个节点被添加
-            self.on('add', function (item) {
-
-                if( self.ifPause ){
-
-                    return;
-                }
-
-                var child;
-
-                // 若当前没有节点在执行，则寻找一个节点，执行它
-                if (self.runningItemCount <= 0) {
-
-                    child = self.getNextChild();
-                }
-
-                // 若一个节点是在父节点running的时候被add的，且该父节点没有其他子节点在巡行，则执行该子节点
-                if (item.addTime === 'running' && item.parent.isChildRunning === false ) {
-
-                    child = item;
-                }
-
-                if (child) {
-
-                    // 此处是同步的emit
-                    self.emit('runBegin', child);
-                }
-            });
-
-            // 一个节点开始执行
-            self.on('runBegin', function (item) {
-
-                self.currentQueueItem = item;
-                self.runningItemCount++;
-                item.run();
-
-            });
-
-            // 一个节点的method执行完毕
-            self.on('runFinished', function (item) {
-
-                item.selfStat = 'done';
-                self.currentQueueItem = item;
-
-                // 若一个节点的回调函数在该节点的method执行期间被调用（这个节点应该是一个同步方法），则检查该节点是否完毕
-                if( item.callbackTime === 'running' ){
-
-                    item.done();
-                }
-            });
-
-            // 一个节点执行完毕
-            self.on('done', function (item) {
-
-                // 若队列被pause
-                if( self.ifPause ){
-                    return;
-                }
-
-                if (item.isDone) {
-                    self.runningItemCount--;
-                    item.parent.isChildRunning = false;
-                }
-
-                // 检查是否当前已经有item在执行中
-                // 若有节点在执行，再检查当前节点是否是在父节点method执行的时候被添加（因此该子节点完毕，其附件点未必完毕），是的话就继续找下一个可以运行的节点（比如兄弟节点）
-                if (self.runningItemCount <= 0 || ( item.addTime === 'running' && item.parent.isChildRunning === false )) {
-
-
-                    var child = self.getNextChild();
-                    if (child) {
-
-                        self.emit('runBegin', child);
-
-                    }
-                }
-            });
-        }
-
+        // 绑定事件
+        this.attach();
     };
 
     QueueItem.prototype = new EE();
     Extend(QueueItem.prototype, {
 
         /**
-         *  异步的emit
+         * 进行事件绑定
          */
-        fire:function () {
 
-            var _arguments = arguments;
+        attach: function(){
+
             var self = this;
 
-            setTimeout(function () {
-                self.root.emit.apply(self.root, _arguments);
-            }, 0);
+            /* method被执行过 */
+
+            this.on( 'methodExecuted', function(){
+                self.isMethodExecuted = true;
+            });
+
+            /* method执行完毕（在method中添加的所有children都执行完毕）*/
+
+            this.on( 'methodDone', function(){
+                self.isMethodDone = true;
+                if( self.checkDone() ){
+                    self.fire( 'done' );
+                }
+                else {
+                    self.getNextChildToRun();
+                }
+            });
+
+            /* 回调被执行过 */
+
+            this.on( 'callbackExecuted', function(){
+                self.isCallbackExecuted = true;
+            });
+
+            /* 回调执行完毕（包括所有在回调中添加的children都执行完毕）*/
+
+            this.on( 'callbackDone', function(){
+                self.isCallbackDone = true;
+                if( self.checkDone() ){
+                    self.fire( 'done' );
+                }
+                else {
+                    self.getNextChildToRun();
+                }
+            });
+
+            /* 某个child执行完毕 */
+
+            this.on( 'childDone', function( child ){
+
+                if( !self.isMethodDone && self.checkMethodDone() ){
+                    self.fire( 'methodDone' );
+                }
+                else if( !self.isCallbackDone && self.checkCallbackDone() ){
+                    self.fire( 'callbackDone' );
+                }
+                else {
+                    self.getNextChildToRun();
+                }
+            });
+
+            /* 当前节点执行完毕 */
+
+            this.on( 'done', function(){
+                self.parent.fire( 'childDone', self );
+            });
         },
 
         /**
@@ -349,7 +292,7 @@
 
             this.parent.isChildRunning = true;
 
-            this.selfStat = 'running';
+            this.selfStat = 'methodRunning';
 
             if( typeof this.method === 'function' ){
 
@@ -357,59 +300,91 @@
                 // so that new queueItem which is created in method can use `arguments.callee.caller.queueItem` to indicated its parent.
                 // And we backup in case of overwrite.
                 var bakQueueItem = this.method.queueItem;
+                var curChildrenLen = this.children.length;
+                var bakMethodStat = this.method.stat;
 
+                this.method.stat = 'method';
                 this.method.queueItem = this;
                 this.method.apply(this.scope, this.arguments);
 
                 this.method.queueItem = bakQueueItem;
+                this.method.stat = bakMethodStat;
+
+                this.fire( 'methodExecuted', self );
+
+                if( this.children.length === curChildrenLen ){
+                    this.fire( 'methodDone', self );
+                }
             }
-
-            this.selfStat = 'done';
-
-            this.fire('runFinished', self);
-        },
-
-        goon: function (){
-
-            this.root.ifPause = false;
-
-            if( this.pausedItem ){
-                this.pausedItem.fire( 'done', this.pausedItem );
-            }
-        },
-
-        pause: function ( dur ){
-
-            this.root.ifPause = true;
-            this.root.pausedItem = this.root.currentQueueItem;
-            var self = this;
-
-            dur = parseInt( dur );
-
-            if( !isNaN( dur ) && dur > 0 ){
-
-                setTimeout( function (){
-
-                    self.goon();
-
-                }, dur );
+            else {
+                this.fire( 'methodExecuted', self );
+                this.fire( 'methodDone', self );
             }
         },
 
         /**
-         * Clear all its children.
-         * This method should not effect the method (include itself) that is already running.
+         * 检查：methodExecuted && 所有在method时被添加的child都已经执行完毕
+         * @return {Boolean}
          */
-        clear: function(){
-            this.children.forEach(function( child ){
-                child.clear();
-            });
-            this.children = [];
 
-            if( this.root === this ){
-                this.currentQueueItem = this.root;
-                this.runningItemCount = 0;
-                this.pausedItem = null;
+        checkMethodDone: function(){
+
+            var child;
+            var index;
+
+            if( !this.isMethodExecuted ){
+                return false;
+            }
+
+            for( index = 0; child = this.children[ index ]; index++ ){
+
+                if( child.addStat == 'method' && child.checkDone() == false ){
+                    return false;
+                }
+            }
+
+            return true;
+        },
+
+        /**
+         * 检查：callbackExecuted && 所有在callback中被添加的child都已经执行完毕
+         * @return {Boolean}
+         */
+
+        checkCallbackDone: function(){
+
+            var child;
+            var index;
+
+            if( !this.isCallbackExecuted ){
+                return false;
+            }
+
+            for( index = 0; child = this.children[ index ]; index++ ){
+
+                if( child.addStat == 'callback' && child.checkDone() == false ){
+                    return false;
+                }
+            }
+
+            return true;
+        },
+
+        /**
+         * 检查是否执行完毕
+         * @return {Boolean}
+         */
+
+        checkDone: function(){
+
+            return this.checkMethodDone() && this.checkCallbackDone();
+        },
+
+        done: function(){
+
+            if( this.checkDone() ){
+                this.isDone = true;
+                this.fire( 'done' );
             }
         },
 
@@ -419,62 +394,41 @@
             var childToRun = null;
             var child;
 
-            for (var i = 0; child = this.children[ i ]; i++) {
+            for ( var i = 0; child = this.children[ i ]; i++ ) {
 
-                if (!child.isDone && child.selfStat === 'wait' ) {
+                if (!child.isDone() && child.selfStat === 'wait' ) {
                     childToRun = child;
-
                     break;
-                }
-                else {
-                    childToRun = child.getNextChild();
-
-                    if (childToRun) {
-                        break;
-                    }
                 }
             }
 
             return childToRun;
         },
 
+        getNextChildToRun: function(){
+
+            var child = this.getNextChild();
+            child.run();
+        },
+
         /**
          * 添加子节点
          * @param item
+         * @param {String} addStat
          */
-        addChild:function (item) {
+        addChild:function ( item, addStat ) {
 
             item.parent = this;
             item.root = this.root;
-            item.addTime = this.selfStat;
+            item.addStat = addStat;
 
             // add the new item to this childrens list
             this.children.push(item);
 
-            this.fire('add', item);
-        },
-
-        /**
-         * 检查当前节点是否已经完全结束
-         */
-        done:function () {
-
-            // 若已经完成，则直接跳过，防止反复检查
-            if (this.isDone) {
-
-                this.fire('done', this);
-                return;
-            }
-
-            if (this.selfStat !== 'done') {
-
-                this.isDone = false;
-            }
-            else this.isDone = this.isCallbackDone !== false;
-
-            this.fire('done', this);
+            this.fire('childAdd', item);
         }
     });
+
 
     // Export the Underscore object for **Node.js**, with
     // backwards-compatibility for the old `require()` API.
