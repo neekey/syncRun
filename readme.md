@@ -5,29 +5,29 @@ syncRun是一个简单的小工具。它通过对异步方法进行简单的封�
 
 	var SyncRun = require( 'syncRun' ).newQueue();
 
+    // 异步方法
     var sleep = SyncRun(function(s,fn){
-    
         setTimeout( fn, s );
     });
-    
+
+    // 纯粹的同步方法
     var doSth = SyncRun(function(next){
-    
         console.log( 'do something here!' );
         next();
     });
-    
+
+    // 复合
     var doElseTh = SyncRun(function(){
-    
         sleep( 3000, function (){
-    
             console.log( 'after 3s, do something else!' );
         });
     });
-    
+
+    // 下面使用我们上面创造的方法来输出一下东西
+
     sleep( 5000, function(){
-    
         console.log( '5s passed' );
-    } );
+    });
     
     doSth();
     
