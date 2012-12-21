@@ -125,6 +125,17 @@ var complexFunc = SyncMethod(function( next ){
     });
 });
 
+/**
+ * Mocha `it` style
+ */
+var Do = function( fn ){
+    _Do( fn, function(){});
+};
+
+var _Do = SyncMethod(function( body, next ){
+    body( next );
+});
+
 
 
 describe('Order Test', function(){
@@ -360,6 +371,30 @@ describe('Order Test', function(){
                         done();
                     });
                 });
+            });
+        });
+
+        it( 'Mocha `it` style', function( done ){
+
+            var queue = [];
+
+            Do(function( next ){
+
+                setTimeout(function(){
+                    queue.push( 'a' );
+                    next();
+                }, 500 );
+            });
+
+            Do(function( next ){
+                queue.push( 'b' );
+                next();
+            });
+
+            Do(function( next ){
+                expect( [ 'a', 'b' ]).eql( queue );
+                done();
+                next();
             });
         });
     });
